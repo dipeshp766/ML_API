@@ -3,7 +3,7 @@ etc/
 include/
 share/ 
 datasets/zips
-
+models/spam-sms
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
