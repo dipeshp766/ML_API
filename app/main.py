@@ -3,7 +3,19 @@ import json
 from typing import Optional
 from fastapi import FastAPI
 from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import tokenizer_from_json
+import numpy as np
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 app = FastAPI()
 
@@ -33,11 +45,25 @@ def on_startup():
         MODEL_METADATA = json.loads(METADATA_PATH.read_text())
         labels_legend_inverted = MODEL_METADATA["labels_legend_inverted"]
 
+def predict(query:str):
+    sequences = AI_TOKENIZER.texts_to_sequences([query])
+    maxlen = MODEL_METADATA.get('max_sequence') or 280
+    x_input = pad_sequences(sequences, maxlen=maxlen)
+    print(x_input)
+    print(x_input.shape)
+    preds_array = AI_MODEL.predict(x_input)
+    preds = preds_array[0]
+    top_idx_val = np.argmax(preds)
+    top_pred = {
+        "label": labels_legend_inverted[str(top_idx_val)], "confidence": float(preds[top_idx_val])
+    }
+    labeled_preds = [{"label": labels_legend_inverted[str(i)], "confidence": float(x)} for i,x in enumerate(list(preds))]
+    return json.loads(json.dumps({"top": top_pred, "predictions": labeled_preds}, cls=NumpyEncoder))
 
 @app.get("/")
 def read_index(q:Optional[str] = None):
     global AI_MODEL, MODEL_METADATA, labels_legend_inverted
     query = q or "Hello World"
-    # predict(query)
-    print(AI_MODEL)
-    return {"query": query, **MODEL_METADATA, "legend": labels_legend_inverted}
+    preds_dict = predict(query)
+    # print(AI_MODEL)
+    return {"query": query, "results": preds_dict}
